@@ -2,15 +2,18 @@ from fastapi import FastAPI, File, UploadFile
 from pydantic import BaseModel, Field
 import os
 from load_document import load_documents
-from rag_pipeline import create_chunks, create_vector_store
+from searching.hybrid import hybrid_langchain_retriever
+from rag_pipeline import create_chunks, create_vector_store, loaded_vector_store, all_chunks
 from typing import List, Annotated
 
 app = FastAPI()
 
+# pydantic class for input
 class Question(BaseModel):
     text: str = Field(..., title="The question to ask")
+    
 
-# API endpopint to handle document (files: pdf,txt,docx) uploading
+
 # API endpoint to handle document (files: pdf, txt, docx) uploading
 @app.post("/upload")
 def upload_documents(files: Annotated[List[UploadFile], File(...)]):
@@ -19,6 +22,7 @@ def upload_documents(files: Annotated[List[UploadFile], File(...)]):
     
     uploaded_filenames = []
     
+    # save uploaded files in the document directory
     for file in files:
         folder_path = os.path.join(documents_dir, file.filename)
         with open(folder_path, "wb") as f:
@@ -45,5 +49,21 @@ def upload_documents(files: Annotated[List[UploadFile], File(...)]):
 # API endpopint to handle question answering using the RAG pipeline
 @app.post("/ask")
 def ask_question(question: Question):
+    # get relevent documents from vector store against the question
+    relevent_documents = hybrid_langchain_retriever(
+        query=question.text,
+        lc_documents=all_chunks,
+        vectorstore=loaded_vector_store,
+        k=5
+    )
+    
+    
+    
+    
+    
     # Placeholder for the actual RAG pipeline logic
-    return {"response": "This is a placeholder response."}
+    return {
+        "response": "This is a placeholder response.",
+        "retrieved_documents": relevent_documents
+        
+        }
