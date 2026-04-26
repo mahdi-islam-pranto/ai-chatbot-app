@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Form, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from searching.hybrid import hybrid_langchain_retriever
 from rag_pipeline import  loaded_vector_store
@@ -13,6 +14,16 @@ app = FastAPI(
     description="API for question-answering using RAG pipeline with uploaded documents.",
     version="1.0"
 )
+
+# Allow CORS (frontend to backend communication)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8666", "http://127.0.0.1:8666"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # pydantic class for input
 class Question(BaseModel):
@@ -35,7 +46,7 @@ SYSTEM_PROMPT = """
 
 # API endpopint to handle question answering using the RAG pipeline
 @app.post("/ask")
-def ask_question(question: Question):
+def ask_question(question: Question = Form(...)):
     
     try:
         # check if vector store is loaded
@@ -46,6 +57,9 @@ def ask_question(question: Question):
     
     except Exception as e:
         return {
+            "success": False,
+            "message": "Error loading vector store",
+            "status_code": 500,
             "error": f"Error loading vector store: {str(e)}. Please upload documents first."
         }
     
@@ -76,15 +90,34 @@ def ask_question(question: Question):
         """)
     ])
 
+    # print the retrieved documents for debugging
+    print(f"Retrieved documents: {relevant_documents}")
 
     main_prompt = prompt_template.format_messages(document_texts=relevant_documents, user_question=question.text)
-    results = llm.invoke(main_prompt)
+
+    try:
+        # invoke the llm with the main prompt
+         results = llm.invoke(main_prompt)
+    except Exception as e:
+        return {
+            "success": False,
+            "message": "Error invoking the AI model",
+            "status_code": 500,
+        }
     
-    
+    # server status code
+    status_code = status.HTTP_200_OK    
+
     # Placeholder for the actual RAG pipeline logic
     return {
-        "response": results.content,
-        "metadata": results.usage_metadata
-        # "retrieved_documents": relevant_documents
+        "success": True,
+        "message": "response generated successfully",
+        "status_code": 200,
+        "data": {
+            "question": question.text,
+            "response": results.content
+        },
+        "metadata": results.usage_metadata,
+        "status": status_code
         
         }
